@@ -1,0 +1,231 @@
+---
+title: "Seoul Air Pollution Analysis (2000-2024)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load required libraries
+
+```{r load-libraries, message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(rgdal)
+#library(tmap)
+```
+
+## Import and process yearly data
+
+```{r import-yearly-data}
+yearly_data <-tibble::tribble(
+                ~측정년도,  ~측정소명, ~`이산화질소농도(ppm)`, ~`오존농도(ppm)`, ~`일산화탄소농도`, ~`아황산가스`, ~미세먼지, ~`초미세먼지`,
+                2024L,  "강남구",            0.02,       0.0361,            0.37,        0.0025,   31L,           19L,
+                2024L, "강남대로",          0.0267,       0.0228,            0.53,        0.0027,   35L,           18L,
+                2024L,  "강동구",          0.0185,       0.0399,            0.48,        0.0023,   31L,           17L,
+                2024L, "강변북로",           0.026,       0.0245,             0.5,        0.0026,   34L,           18L,
+                2024L,  "강북구",          0.0122,       0.0396,            0.35,        0.0022,   29L,           17L,
+                2024L,  "강서구",          0.0186,        0.037,            0.39,        0.0029,   33L,           17L,
+                2024L, "공항대로",          0.0256,       0.0314,            0.43,         0.003,   34L,           17L,
+                2024L,  "관악구",          0.0196,       0.0362,             0.4,        0.0027,   35L,           18L,
+                2024L,  "관악산",          0.0076,       0.0553,            0.38,        0.0028,   31L,           16L,
+                2024L,  "광진구",          0.0193,       0.0394,            0.49,        0.0026,   31L,           17L,
+                2024L,  "구로구",          0.0128,        0.038,            0.36,        0.0026,   34L,           17L
+                )
+
+  
+  
+# Process yearly data
+yearly_data_processed <- yearly_data %>%
+  filter(측정년도 >= 2000) %>%
+  select(측정년도, 측정소명, 초미세먼지) %>%
+  rename(Year = 측정년도, Station = 측정소명, PM2.5 = 초미세먼지)
+
+# Calculate average PM2.5 for Seoul by year
+seoul_avg_pm25 <- yearly_data_processed %>%
+  group_by(Year) %>%
+  summarize(Avg_PM2.5 = mean(PM2.5, na.rm = TRUE))
+```
+
+## 1. 2024 fine dust levels in 25 cities and districts on a GIS map
+
+```{r gis-map-2024}
+# Assuming you have a shapefile of Seoul districts
+# https://github.com/southkorea/seoul-maps/blob/master/juso/2015/shp/seoul_municipalities.shp
+#http://www.gisdeveloper.co.kr/?p=2332
+seoul_map <- st_read("D:/Non_Documents/AI/R/유형별 예제/shp/sig_20230729/sig.shp")
+
+## shp 파일을 불러온다. 
+map <- readOGR("D:/Non_Documents/AI/R/유형별 예제/shp/sig_20230729/sig.shp", encoding = 'CP949')
+map2<-readOGR("./shp/sig_20230729/sig.shp", encoding = 'CP949')#구
+
+# Filter 2024 data and join with map data
+pm25_2024 <- yearly_data_processed %>%
+  filter(Year == 2024) %>%
+  select(Station, PM2.5)
+
+seoul_map_2024 <- left_join(seoul_map, pm25_2024, by = c("district_name" = "Station"))
+
+# Create the map
+tm_shape(seoul_map_2024) +
+  tm_fill("PM2.5", 
+          style = "quantile", 
+          palette = "YlOrRd",
+          title = "PM2.5 Levels") +
+  tm_borders() +
+  tm_layout(title = "2024 Fine Dust Levels in Seoul",
+            legend.outside = TRUE)
+```
+
+## 2. Average fine dust trend in Seoul (2000-2024)
+
+```{r seoul-trend-graph}
+ggplot(seoul_avg_pm25, aes(x = Year, y = Avg_PM2.5)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Average Fine Dust (PM2.5) Trend in Seoul (2000-2024)",
+       x = "Year",
+       y = "Average PM2.5 (μg/m³)")
+```
+
+## Import and process monthly data
+
+```{r import-monthly-data}
+monthly_data <- read_csv("서울시 월별 평균 대기오염도 정보.csv", locale = locale(encoding = "UTF-8"))
+monthly_data <- tibble::tribble(
+                     ~측정월,    ~측정소명, ~`이산화질소농도`, ~`오존농도`, ~`일산화탄소농도`, ~`아황산가스`, ~`미세먼지`, ~`초미세먼지`,
+                  202410L,    "강남구",          0.0183,       0.0252,            0.34,        0.0023,          21L,           12L,
+                  202410L,   "강남대로",          0.0271,       0.0132,            0.52,        0.0029,          22L,           11L,
+                  202410L,    "강동구",          0.0159,       0.0277,            0.44,        0.0023,          21L,           12L,
+                  202410L,   "강변북로",          0.0214,       0.0197,            0.51,        0.0025,          23L,           11L,
+                  202410L,    "강북구",          0.0098,       0.0307,            0.31,        0.0019,          19L,           12L,
+                  202410L,    "강서구",          0.0195,       0.0272,             0.4,        0.0029,          25L,           13L,
+                  202410L,   "공항대로",          0.0257,       0.0231,            0.43,        0.0027,          26L,           13L,
+                  202410L,    "관악구",          0.0207,        0.027,            0.39,        0.0026,          26L,           14L,
+                  202410L,    "관악산",          0.0068,       0.0558,            0.54,        0.0029,          27L,           12L,
+                  202410L,    "광진구",          0.0192,       0.0323,            0.49,        0.0027,          20L,           11L,
+                  202410L,    "구로구",          0.0131,       0.0269,            0.44,        0.0023,          21L,           10L,
+                  202410L,    "금천구",          0.0194,       0.0275,            0.34,        0.0026,          19L,           15L,
+                  202410L,     "남산",          0.0114,       0.0324,            0.49,        0.0026,          20L,            9L,
+                  202410L,    "노원구",          0.0176,       0.0246,            0.36,        0.0023,          24L,           13L,
+                  202410L,    "도봉구",          0.0146,       0.0309,             0.4,        0.0028,          21L,           13L,
+                  202410L,   "도산대로",          0.0192,       0.0227,            0.38,        0.0028,          28L,           19L,
+                  202410L,   "동대문구",          0.0177,       0.0267,            0.39,        0.0021,          24L,           13L,
+                  202410L,    "동작구",          0.0186,       0.0264,            0.36,        0.0024,          23L,           13L,
+                  202410L,   "동작대로",          0.0302,       0.0183,            0.47,        0.0026,          27L,           14L,
+                  202410L,    "마포구",          0.0188,       0.0284,            0.37,        0.0024,          24L,           13L,
+                  202410L, "마포아트센터",          0.0161,       0.0338,            0.44,        0.0031,          23L,           11L,
+                  202410L,    "북한산",           0.006,       0.0368,            0.38,        0.0027,          21L,           14L,
+                  202410L,   "서대문구",           0.013,       0.0343,            0.43,        0.0027,          21L,           12L,
+                  202410L,    "서울숲",          0.0158,       0.0262,            0.39,        0.0025,          19L,           10L,
+                  202410L,    "서초구",          0.0155,       0.0244,            0.33,        0.0021,          27L,           13L,
+                  202410L,    "성동구",          0.0179,       0.0273,            0.34,        0.0028,          22L,           12L,
+                  202410L,    "성북구",          0.0169,       0.0241,            0.37,        0.0028,          23L,           12L,
+                  202410L,     "세곡",          0.0184,       0.0178,            0.49,        0.0024,          21L,           10L,
+                  202410L,    "송파구",          0.0202,       0.0219,            0.36,        0.0022,          22L,           12L,
+                  202410L,   "시흥대로",          0.0363,       0.0162,            0.55,         0.003,          28L,           15L,
+                  202410L,    "신촌로",          0.0231,       0.0216,            0.49,        0.0028,          25L,           14L,
+                  202410L,    "양천구",          0.0177,       0.0246,            0.32,         0.002,          25L,           14L,
+                  202410L,   "영등포구",          0.0209,       0.0286,            0.37,        0.0024,          24L,           14L,
+                  202410L,   "영등포로",          0.0254,       0.0237,            0.43,        0.0027,          26L,           13L,
+                  202410L,  "올림픽공원",          0.0149,       0.0252,            0.56,        0.0022,          20L,           11L,
+                  202410L,    "용산구",          0.0232,       0.0226,            0.41,        0.0022,          25L,           13L,
+                  202410L,    "은평구",           0.012,       0.0241,            0.42,        0.0027,          22L,           12L,
+                  202410L, "자연사박물관",          0.0118,       0.0341,            0.39,        0.0027,          22L,           12L,
+                  202410L,    "정릉로",          0.0294,       0.0211,            0.45,        0.0025,          26L,           14L,
+                  202410L,     "종로",          0.0186,       0.0223,            0.44,        0.0027,          22L,           11L,
+                  202410L,    "종로구",          0.0175,        0.028,            0.37,        0.0029,          22L,           14L,
+                  202410L,     "중구",          0.0116,       0.0266,            0.37,         0.003,          20L,           13L,
+                  202410L,    "중랑구",          0.0133,       0.0266,            0.32,         0.002,          19L,           11L,
+                  202410L,   "천호대로",          0.0242,       0.0195,            0.43,        0.0023,          22L,           15L
+                  )
+
+# Process monthly data
+monthly_data_processed <- monthly_data %>%
+  filter(substr(측정월, 1, 4) == "2024") %>%
+  select(측정월, 측정소명, 초미세먼지) %>%
+  rename(YearMonth = 측정월, Station = 측정소명, PM2.5 = 초미세먼지) %>%
+  mutate(Month = as.integer(substr(YearMonth, 5, 6)))
+```
+
+## 3. Fine dust trend by month and by city/district (2024)
+
+```{r monthly-trend-graphs}
+# Boxplot of PM2.5 levels by month
+ggplot(monthly_data_processed, aes(x = factor(Month), y = PM2.5)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "PM2.5 Levels by Month in Seoul (2024)",
+       x = "Month",
+       y = "PM2.5 (μg/m³)")
+
+# Line plot of average PM2.5 by month for each district
+monthly_avg_by_district <- monthly_data_processed %>%
+  group_by(Station, Month) %>%
+  summarize(Avg_PM2.5 = mean(PM2.5, na.rm = TRUE))
+
+ggplot(monthly_avg_by_district, aes(x = Month, y = Avg_PM2.5, color = Station)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average PM2.5 Levels by Month and District (2024)",
+       x = "Month",
+       y = "Average PM2.5 (μg/m³)") +
+  theme(legend.position = "right")
+
+# Heatmap of PM2.5 levels by month and district
+ggplot(monthly_avg_by_district, aes(x = Month, y = Station, fill = Avg_PM2.5)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(title = "PM2.5 Levels by Month and District (2024)",
+       x = "Month",
+       y = "PM2.5 (μg/m³)")
+
+# Line plot of average PM2.5 by month for each district
+monthly_avg_by_district <- monthly_data_processed %>%
+  group_by(Station, Month) %>%
+  summarize(Avg_PM2.5 = mean(PM2.5, na.rm = TRUE))
+
+ggplot(monthly_avg_by_district, aes(x = Month, y = Avg_PM2.5, color = Station)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average PM2.5 Levels by Month and District (2024)",
+       x = "Month",
+       y = "Average PM2.5 (μg/m³)") +
+  theme(legend.position = "right")
+
+# Heatmap of PM2.5 levels by month and district
+ggplot(monthly_avg_by_district, aes(x = Month, y = Station, fill = Avg_PM2.5)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(title = "PM2.5 Levels by Month and District (2024)",
+       x = "Month",
+       y = "District",
+       fill = "Avg PM2.5")
+```
+
+## Additional visualizations
+
+```{r additional-visualizations}
+# Histogram of PM2.5 levels in 2024
+ggplot(yearly_data_processed %>% filter(Year == 2024), aes(x = PM2.5)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of PM2.5 Levels in Seoul (2024)",
+       x = "PM2.5 (μg/m³)",
+       y = "Count")
+
+# Scatterplot of PM2.5 levels vs. time (2000-2024)
+ggplot(yearly_data_processed, aes(x = Year, y = PM2.5)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess") +
+  theme_minimal() +
+  labs(title = "PM2.5 Levels in Seoul Over Time (2000-2024)",
+       x = "Year",
+       y = "PM2.5 (μg/m³)")
+```
